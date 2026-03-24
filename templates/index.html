@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Document</title>
+</head>
+<body>
+<h1>Hello world</h1>
+
+<h1>Les produits</h1>
+
+{% for product in data %}
+    <p>{{ product.name }}</p>
+    <p>{{ product.description }}</p>
+    <p>{{ product.price }}</p>
+    <p>{{ product.quantity }}</p>
+{% endfor %}
+
+<h1>Produits</h1>
+
+<form id="productForm">
+
+  <input id="name" placeholder="name"><br>
+  <input id="price" placeholder="price" type="number"><br>
+  <input id="description" placeholder="description"><br>
+  <input id="quantity" placeholder="quantity" type="number"><br>
+  <input id="owner_id" placeholder="owner id" type="number"><br>
+
+  <button type="submit">Créer</button>
+
+</form>
+
+
+<script>
+document.getElementById("productForm").addEventListener("submit", async (e) => {
+    e.preventDefault()
+
+    const data = {
+        name: document.getElementById("name").value,
+        price: parseFloat(document.getElementById("price").value),
+        description: document.getElementById("description").value,
+        quantity: parseInt(document.getElementById("quantity").value),
+        owner_id: parseInt(document.getElementById("owner_id").value)
+
+    }
+
+    const res = await fetch("/products/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+    })
+
+    const result = await res.json()
+    console.log(result)
+})
+</script>
+
+
+</body>
+</html>
