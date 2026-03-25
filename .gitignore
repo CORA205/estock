@@ -12,13 +12,6 @@ __pycache__/
 .pytest_cache/
 .env
 
-# Alembic
-# On ignore les fichiers de config locale mais on GARDE le dossier 'versions'
-# car il contient l'historique de vos migrations de base de données.
-alembic.ini
-# Si vous voulez ignorer la config alembic locale mais garder le dossier :
-# versions/__pycache__/
-
 # Base de données locale (SQLite par exemple)
 *.db
 *.sqlite3
