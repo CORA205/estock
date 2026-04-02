@@ -1,129 +1,124 @@
-from fastapi import APIRouter
-from fastapi import HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session, joinedload
-
-from database.database import engine
 from sqlalchemy import select, or_
 
+from utils.auth import require_admin, get_current_user
+
+from database.database import get_db
 from models import database_models
-from schemas.models import  CustomerCreate, CustomerPatch
+from schemas.models import CustomerCreate, CustomerPatch
 
-
-
-custom = APIRouter(prefix="/customers")
-
-
-database_models.Base.metadata.create_all(bind=engine)
-
-
+custom = APIRouter(prefix="/customers", tags=["Customers"], dependencies=[Depends(get_current_user)])
 
 
 @custom.get("/")
-def all_customers():
-    with Session(engine) as session:
-        stmt = select(database_models.Customer)
-        data = session.scalars(stmt).all()
-    return data
-
-@custom.get("/{name}")
-def get_customer_product_list(name: str):
-     with Session(engine) as session:
-         stmt = select(database_models.Customer).where( or_
-             (database_models.Customer.firstname == name,
-             database_models.Customer.lastname == name)
-         )
-         client = session.scalars(stmt).first()
-
-         if not client:
-             raise HTTPException(status_code=404, detail=f"No existing name {name}")
-
-         customer = client
-         produits = client.products
-         # stmt = select(database_models.Product).where(database_models.Product.owner_id == client.id)
-         # liste = session.scalars(stmt).all()
+def all_customers(db: Session = Depends(get_db)):
+    stmt = select(database_models.Customer)
+    return db.scalars(stmt).all()
 
 
-
-     return {"customer": customer, "products": produits}
-
-
-@custom.get("/v2/{name}")
-def get_customer_product_list(name: str):
-    with Session(engine) as session:
-        stmt = (
-            select(database_models.Customer)
-            .options(joinedload(database_models.Customer.products))
-            .where(
-                or_(
-                    database_models.Customer.firstname == name,
-                    database_models.Customer.lastname == name
-                )
+@custom.get("/search/{name}")
+def get_customer_by_name(name: str, db: Session = Depends(get_db)):
+    stmt = (
+        select(database_models.Customer)
+        .options(joinedload(database_models.Customer.orders))
+        .where(
+            or_(
+                database_models.Customer.firstname == name,
+                database_models.Customer.lastname == name
             )
         )
+    )
+    customer = db.scalars(stmt).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail=f"Aucun client trouvé avec le nom '{name}'")
+    return customer
 
-        result = session.scalars(stmt).first()
 
-    return result
+@custom.get("/{id}")
+def get_customer(id: int, db: Session = Depends(get_db)):
+    stmt = select(database_models.Customer).where(database_models.Customer.id == id)
+    data = db.scalars(stmt).first()
+    if not data:
+        raise HTTPException(status_code=404, detail=f"Client {id} introuvable")
+    return data
 
 
-@custom.post("/")
-def create_customer(customer: CustomerCreate):
-    with Session(engine) as session:
+@custom.get("/{id}/orders")
+def get_customer_orders(id: int, db: Session = Depends(get_db)):
+    """Récupère toutes les commandes d'un client avec leurs items."""
+    stmt = (
+        select(database_models.Customer)
+        .options(
+            joinedload(database_models.Customer.orders)
+            .joinedload(database_models.Order.items)
+        )
+        .where(database_models.Customer.id == id)
+    )
+    customer = db.scalars(stmt).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail=f"Client {id} introuvable")
+    return {
+        "customer_id": customer.id,
+        "firstname": customer.firstname,
+        "lastname": customer.lastname,
+        "orders": customer.orders
+    }
 
-        session.add(database_models.Customer(**customer.model_dump()))
-        session.commit()
-    return {"data":"OK"}
+
+@custom.post("/", status_code=201)
+def create_customer(customer: CustomerCreate, db: Session = Depends(get_db)):
+    # Vérifier que le manager existe
+    manager = db.scalars(
+        select(database_models.User).where(database_models.User.id == customer.manager_id)
+    ).first()
+    if not manager:
+        raise HTTPException(status_code=404, detail=f"Manager {customer.manager_id} introuvable")
+
+    new_customer = database_models.Customer(**customer.model_dump())
+    db.add(new_customer)
+    db.commit()
+    db.refresh(new_customer)
+    return new_customer
+
 
 @custom.put("/{id}")
-def modify_customers(id: int, customer: CustomerCreate):
-   with Session(engine) as session:
+def update_customer(id: int, customer: CustomerCreate, db: Session = Depends(get_db)):
+    stmt = select(database_models.Customer).where(database_models.Customer.id == id)
+    data = db.scalars(stmt).first()
+    if not data:
+        raise HTTPException(status_code=404, detail=f"Client {id} introuvable")
 
-        stmt = select(database_models.Customer).where(database_models.Customer.id == id)
-        data = session.scalars(stmt).first()
-        if not data:
-            raise HTTPException(status_code=404, detail="Customer {id} not found")
+    for key, value in customer.model_dump().items():
+        setattr(data, key, value)
 
-        for key, value in customer.model_dump().items():
-            setattr(data, key, value)
+    db.commit()
+    db.refresh(data)
+    return data
 
-        session.commit()
-        session.refresh(data)
-
-   return data
 
 @custom.patch("/{id}")
-def patch_customer(id:int, customer: CustomerPatch):
-    with Session(engine) as session:
-        stmt = select(database_models.Customer).where(database_models.Customer.id == id)
-        data = session.scalars(stmt).first()
+def patch_customer(id: int, customer: CustomerPatch, db: Session = Depends(get_db)):
+    stmt = select(database_models.Customer).where(database_models.Customer.id == id)
+    data = db.scalars(stmt).first()
+    if not data:
+        raise HTTPException(status_code=404, detail=f"Client {id} introuvable")
 
-        if not data:
-            raise HTTPException(status_code=404, detail="Product not found")
+    for key, value in customer.model_dump(exclude_unset=True).items():
+        setattr(data, key, value)
 
-        for key, value in customer.model_dump(exclude_unset=True).items():
-            setattr(data, key, value)
-        #if key in allowed_fields:
-            # allowed_fields = {"name", "price", "quantity"}
-            #
-            # for key, value in product.model_dump(exclude_unset=True).items():
-            #     if key in allowed_fields:
-            #         setattr(data, key, value)
-
-        session.commit()
-        session.refresh(data)
-
-        return data
+    db.commit()
+    db.refresh(data)
+    return data
 
 
-@custom.delete("/{id}")
-def delete_customers(id:int):
-    with Session(engine) as session:
-        stmt = select(database_models.Customer).where(database_models.Customer.id == id)
-        data = session.scalars(stmt).first()
+@custom.delete("/{id}", dependencies=[Depends(require_admin)])
+def delete_customer(id: int, db: Session = Depends(get_db)):
+    stmt = select(database_models.Customer).where(database_models.Customer.id == id)
+    data = db.scalars(stmt).first()
+    if not data:
+        raise HTTPException(status_code=404, detail=f"Client {id} introuvable")
 
-        if not data:
-            raise HTTPException(status_code=404, detail="Product not found")
-
-        session.delete(data)
-        session.commit()
-
+    db.delete(data)
+    db.commit()
+    return {"detail": f"Client {id} supprimé"}

@@ -1,45 +1,20 @@
 from fastapi import APIRouter
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
 
 from database.database import engine
 from sqlalchemy import select
+
+from utils.auth import require_admin, get_current_user
 
 from models import database_models
 from schemas.models import ProductCreate, ProductPatch
 
 
 
-router = APIRouter(prefix="/products")
+router = APIRouter(prefix="/products", tags=["products"], dependencies=[Depends(get_current_user)])
 
 
-database_models.Base.metadata.create_all(bind=engine)
-
-
-
-
-
-# @router.get("/")
-# async def root():
-#     return {"message": "Hello World"}
-
-# products = [
-#     ProductRead(id = 1, price = 9000, name = "Ballon de Basket",description = "Un ballon de basket de Crazy_Court signé par LeBron James", quantity = 20),
-#     ProductRead(id = 2, price = 4300, name = "Salade paradis", description = "Le repas ultime", quantity = 50),
-#     ProductRead(id = 3, price = 150000, name = "Portable", description = "Iphone XSMas", quantity = 12),
-# ]
-
-
-# @router.get("/")
-# async def say_hello():
-#     return {"message": f"Hello Anlim RADJI"}
-
-# @app.get(f"/products")
-#
-# def all_products():
-#     db = session()
-#     db.query()
-#     return products
 
 @router.get("/first_5_id")
 def get_product_by_first_5_id():
